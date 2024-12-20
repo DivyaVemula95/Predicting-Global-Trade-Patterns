@@ -1,0 +1,557 @@
+---
+title: "Predicting Global Trade Patterns"
+author: | 
+
+ **Team Members:**
+
+ Divya Vemula  
+ 
+ Rahul Chauhan 
+ 
+ Mani Krishna Tippani 
+
+date: "2024-12-11"
+output:
+  slidy_presentation: default
+  ioslides_presentation: default
+---
+
+# Introduction
+
+The project investigates the factors influencing which countries import the most commodities. With globalization, understanding export-import dynamics is crucial for optimizing trade strategies and supporting economic policies. Analyzing import patterns can provide insights into market dependencies, identify potential new markets, and enhance decision-making for exporters. 
+
+### Dataset Description
+
+Data  collect data using the U.S. Census Bureau's International Trade API, which provides detailed information on exports and imports, including commodity codes and values. This will serve as our primary data source.
+
+- **Dataset Source**: U.S. Census Bureau's International Trade API
+
+- **Dataset URL**: "https://api.census.gov/data/timeseries/intltrade/exports/hs"
+
+
+***Variables Included***
+
+**Total 41 Variables**
+
+- **Export District Code**: Unique identifier for the export district.
+- **District Name**: Name of the export district (e.g., Baltimore, MD).
+- **Export Commodity Code**: Code representing the specific commodity being exported.
+- **Export Commodity Long Description**: Detailed description of the commodity.
+- **Export Commodity Short Description**: Brief description of the commodity.
+- **Monthly Export Value (Total)**: Total value of exports for the month.
+- **Total Monthly Export Value**: Cumulative total export value for the month.
+- **Year-to-Date Export Value (Total)**: Cumulative value of exports for the year up to the specified month.
+- **Total Year-to-Date Export Value**: Overall cumulative export value for the year.
+- **Monthly Vessel Export Value**: Value of exports transported by vessel for the month.
+- **Year-to-Date Vessel Export Value**: Cumulative value of vessel exports for the year.
+- **Monthly Vessel Weight**: Weight of exports transported by vessel for the month.
+- **Year-to-Date Vessel Weight**: Cumulative weight of vessel exports for the year.
+- **Monthly Air Export Value**: Value of exports transported by air for the month.
+- **Year-to-Date Air Export Value**: Cumulative value of air exports for the year.
+- **Monthly Air Weight**: Weight of exports transported by air for the month.
+- **Year-to-Date Air Weight**: Cumulative weight of air exports for the year.
+- **Monthly Card Count**: Count of export transactions for the month.
+- **Year-to-Date Card Count**: Count of export transactions for the year.
+- **Monthly Quantity Value**: Value of exported quantities for the month.
+- **Year-to-Date Quantity Value**: Cumulative value of exported quantities for the year.
+- **Monthly Quantity Weight**: Weight of exported quantities for the month.
+- **Year-to-Date Quantity Weight**: Cumulative weight of exported quantities for the year.
+- **Commodity Level**: Level of detail for the commodity classification.
+- **Country Code**: Code representing the country of destination.
+- **Country Name**: Name of the destination country.
+- **Domestic/Foreign Code**: Indicator of whether the data is for domestic or foreign entities.
+- **Last Update Date**: Date when the data was last updated.
+- **Month**: The month of observation.
+- **Monthly Quantity 1**: Quantity metric for the month.
+- **Quantity 1 Flag**: Flag indicating the status of Quantity 1.
+- **Year-to-Date Quantity 1**: Cumulative quantity metric for the year.
+- **Quantity 1 Year Flag**: Flag indicating the status of Year-to-Date Quantity 1.
+- **Monthly Quantity 2**: Second quantity metric for the month.
+- **Quantity 2 Flag**: Flag indicating the status of Quantity 2.
+- **Year-to-Date Quantity 2**: Cumulative second quantity metric for the year.
+- **Quantity 2 Year Flag**: Flag indicating the status of Year-to-Date Quantity 2.
+- **Summary Level**: Level of summarization for the data.
+- **Summary Level 2**: Additional level of summarization.
+- **Unit Quantity 1**: Measurement unit for Quantity 1.
+- **Unit Quantity 2**: Measurement unit for Quantity 2.
+
+# Project Investigation
+
+- In this project, we aim to analyze export data from the Baltimore, MD district to uncover insights related to export patterns, trends, and factors influencing export values. Using a dataset that includes various metrics, such as monthly and year-to-date export values, shipping methods, and commodity descriptions.
+
+- This dataset enables to predict export values, for different commodities, transport modes across different countries.
+
+### Why is this data interesting? 
+
+- Dataset holds both time-series and categorical features, provide an opportunity to explore patterns over time and the potential effects of commodity type, country of origin, and mode of transport on export volumes. 
+
+- Export data holds both short-term and long-term patterns that vary by mode, which RNNs are well-suited to capture due to their ability to maintain and use memory over sequences.
+
+- Performance of different modes under varying conditions is essential for logistics optimization helps forecast inventory needs, plan shipments and reduce supply chain bottlenecks.
+
+
+### Data Analysis Framework
+
+**Data Exploration(EDA)**: 
+
+- Summary Statistics: Generate descriptive statistics to capture the essence of the data.
+
+- Visualizations: Create plots to visualize trends over time and identify any seasonal patterns in exports.
+
+
+
+**Load Required Libraries**
+
+```{r setup, warning=FALSE, message=FALSE}
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+if (!require('tidyverse')) install.packages('tidyverse'); library('tidyverse')
+if (!require('h2o')) install.packages('h2o'); library('h2o')
+if (!require('kableExtra')) install.packages('kableExtra'); library('kableExtra')
+if (!require('DALEXtra')) install.packages('DALEXtra'); library('DALEXtra')
+if (!require('skimr')) install.packages('skimr'); library('skimr')
+if (!require('recipes')) install.packages('recipes'); library('recipes')
+if (!require('janitor')) install.packages('janitor'); library('janitor')
+if (!require('caret')) install.packages('caret'); library('caret')
+if (!require('stringr')) install.packages('stringr'); library('stringr')
+if (!require('DALEX')) install.packages('DALEX'); library('DALEX')
+if (!require('ggplot2')) install.packages('ggplot2'); library('ggplot2')
+if (!require('httr')) install.packages('httr'); library('httr')
+if (!require('jsonlite')) install.packages('jsonlite'); library('jsonlite')
+if (!require('tibble')) install.packages('tibble'); library('tibble')
+if (!require('dplyr')) install.packages('dplyr'); library('dplyr')
+if (!require('tidyr')) install.packages('tidyr'); library('tidyr')
+
+```
+
+**Data Wrangling**
+
+**Read the data**
+
+``` {r loading data}
+api_url <- "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=DISTRICT,DIST_NAME,E_COMMODITY,E_COMMODITY_LDESC,ALL_VAL_MO,ALL_VAL_YR,VES_VAL_MO,VES_VAL_YR,AIR_VAL_MO,AIR_VAL_YR,CC_YR,QTY_1_YR,QTY_2_YR,CTY_CODE,CTY_NAME,COMM_LVL,DF,LAST_UPDATE,YEAR,MONTH,VES_WGT_YR&YEAR=2013&MONTH=12&DISTRICT=13"
+response <- GET(api_url, timeout(60))
+
+if (status_code(response) == 200) {
+  data <- fromJSON(content(response, "text"))
+  headers <- data[1, ]
+  records <- data[-1, ]
+  
+  meaningful_headers <- c(
+    "District Code", "District Name", "Export Commodity Code", 
+    "Export Commodity Long Description", "Total Monthly Export Value", 
+    "Total Year-to-Date Export Value", "Monthly Vessel Export Value", 
+    "Year-to-Date Vessel Export Value", "Monthly Air Export Value", 
+    "Year-to-Date Air Export Value", "Year-to-Date Card Count", 
+    "Quantity 1 Year-to-Date", "Quantity 2 Year-to-Date", 
+    "Country Code", "Country Name", "Commodity Level", 
+    "Domestic/Foreign Indicator", "Last Update", "Year", 
+    "Month", "Year-to-Date Vessel Weight"
+  )
+  data_table <- as_tibble(records, .name_repair = "unique")
+  colnames(data_table) <- meaningful_headers
+  print("Data successfully collected and loaded!")
+} else {
+  stop(paste("Error:", status_code(response)))
+}
+
+
+```
+
+**Data Cleaning and Preprocessing**
+
+```{r Clean and Transform the data}
+
+data_table <- data_table %>% clean_names()
+
+if (nrow(data_table) > 20000) {
+  data_table <- data_table %>% sample_n(20000) 
+}
+
+total_records <- nrow(data_table)  
+
+missing_values <- sapply(data_table, function(x) sum(is.na(x)))
+
+data_table <- data_table %>% drop_na()
+
+data_table <- data_table %>%
+  mutate(across(where(is.character), as.factor))
+
+numeric_cols <- data_table %>%
+  select(where(is.numeric)) %>%
+  colnames()
+data_table <- data_table %>%
+  mutate(across(all_of(numeric_cols), ~ (.-min(.))/(max(.)-min(.))))
+
+selected_columns <- c(
+  "district_code", "district_name", "export_commodity_code", 
+  "export_commodity_long_description", "total_monthly_export_value", 
+  "total_year_to_date_export_value", "monthly_vessel_export_value", 
+  "year_to_date_vessel_export_value", "monthly_air_export_value", 
+  "year_to_date_air_export_value", "year_to_date_card_count", 
+  "quantity_1_year_to_date", "quantity_2_year_to_date", 
+  "country_code", "country_name", "commodity_level", 
+  "domestic_foreign_indicator", "last_update", "year", 
+  "month", "year_to_date_vessel_weight"
+)
+
+```
+
+
+**Display Data for top 10 rows and 10 cloumns**
+```{r}
+data_table <- data_table %>% select(all_of(selected_columns))
+
+data_table_sample <- data_table %>%
+  slice_sample(n = 10) %>%
+  select(1:10) %>%
+  arrange(desc(total_monthly_export_value))
+
+data_table_sample %>%
+  kbl(
+    align = 'c',
+    format = "html"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = TRUE,
+    font_size = 14
+  ) %>%
+  column_spec(1:2, bold = TRUE, color = "maroon") %>%
+  column_spec(3:4, italic = TRUE, color = "darkgreen") %>%
+  column_spec(5:6, bold = TRUE, color = "#FF00FF") %>%
+  column_spec(7:8, italic = TRUE, color = "purple") %>%
+  column_spec(9:10, bold = TRUE, color = "darkorange") %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#0073e6") %>%
+  add_header_above(c("Predicting Global Trade Patterns Data" = 10), 
+                   bold = TRUE, background = "#0073e6", color = "white")
+
+
+```
+
+
+**Predictors Data**
+
+``` {r Predictors}
+
+predictors <- c("district_code", "export_commodity_code", "export_commodity_long_description", 
+                "total_year_to_date_export_value", "monthly_vessel_export_value", 
+                "year_to_date_vessel_export_value", "monthly_air_export_value", 
+                "year_to_date_air_export_value", "year_to_date_card_count", 
+                "quantity_1_year_to_date", "quantity_2_year_to_date", 
+                "country_code", "country_name", "commodity_level", 
+                "domestic_foreign_indicator", "year_to_date_vessel_weight")
+
+for (predictor in predictors) {
+  data_table[[predictor]] <- as.factor(data_table[[predictor]])
+}
+
+train_x_tbl <- data_table |> select(-total_monthly_export_value)
+train_x_tbl_sorted <- train_x_tbl |> 
+  arrange(desc(monthly_vessel_export_value))
+
+kable(head(train_x_tbl_sorted, 10), format = "html", align = "l", caption = "Top 10 Rows of Training Predictor Variables") %>% 
+  kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover", "condensed", "responsive", "bordered"), position = "center", font_size = 14) %>%
+  column_spec(1:20, bold = TRUE, background = "lightblue") %>% 
+  row_spec(0, bold = TRUE, color = "white", background = "#333333") %>% 
+  
+  footnote(general = "Top 10 rows", general_title = "Note: ", footnote_as_chunk = TRUE)
+
+```
+
+**Outcome Varible Data**
+
+```{r Outcome variable}
+train_y_tbl <- data_table |> select(total_monthly_export_value)
+train_y_tbl_sorted <- train_y_tbl |> 
+  arrange(desc(total_monthly_export_value))
+
+
+kable(head(train_y_tbl_sorted, 10), format = "html", align = "l", caption = "Top 10 Rows of Outcome Variable") %>% 
+  kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover", "condensed", "responsive", "bordered", "highlight"), position = "center", font_size = 14) %>% 
+  add_header_above(c("Total Monthly Export Value Data" = 1)) %>% 
+  row_spec(0, bold = TRUE, color = "white", background = "#2C3E50") %>% 
+  column_spec(1, bold = TRUE,color = "yellow", background = "#0073e6") %>% 
+  footnote(general = "This table displays the top 10 rows of the training target variable after preprocessing.", general_title = "Note: ", footnote_as_chunk = TRUE)
+
+```
+
+### Data Modelling
+
+**initialize the h2o instance**
+
+```{r initializing h2o, warning=FALSE}
+h2o.no_progress()
+h2o.init(nthreads = -1)
+```
+
+**Load the saved H2o model**
+
+```{r load h2o model, warning=FALSE}
+h2o_model <- h2o.loadModel("TeamProject-Group1-PredictingGlobalTradePatterns.h2o")
+summary(h2o_model)
+```
+
+**Variable Importance**
+```{r}
+var_imp <- as.data.frame(h2o.varimp(h2o_model))
+var_imp <- head(var_imp, 10)
+# Style the variable importance table
+var_imp %>%
+  kbl(
+    caption = "Variable Importance Table for H2O Model",
+    align = "c"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE,
+    font_size = 14
+  ) %>%
+  column_spec(1:4, bold = TRUE, background = "pink", color = "black") %>%
+  row_spec(0, bold = TRUE, background = "#333333", color = "white")
+```
+
+
+
+### Predictive performance of the model
+
+**Data Partition**
+
+```{r model metrics, warning=FALSE}
+h2o_df <- as.h2o(data_table)
+
+colnames(h2o_df) <- gsub(" ", "_", colnames(h2o_df)) 
+colnames(h2o_df) <- tolower(colnames(h2o_df))  
+
+h2o_df$total_monthly_export_value <- as.numeric(h2o_df$total_monthly_export_value)
+h2o_df$total_monthly_export_value <- log1p(h2o_df$total_monthly_export_value)
+
+splits <- h2o.splitFrame(data = h2o_df, ratios = 0.8, seed = 123)
+train_h2o <- splits[[1]] 
+test_h2o <- splits[[2]] 
+
+```
+
+
+**Performance And Accuracy Metrics**
+
+```{r}
+performance <- h2o.performance(h2o_model, newdata = test_h2o)
+metrics <- list()
+
+if (!is.null(h2o.mse(performance))) metrics$MSE <- h2o.mse(performance)
+if (!is.null(h2o.rmse(performance))) metrics$RMSE <- h2o.rmse(performance)
+if (!is.null(h2o.mae(performance))) metrics$MAE <- h2o.mae(performance)
+if (!is.null(h2o.rmsle(performance))) metrics$RMSLE <- h2o.rmsle(performance)
+if (!is.null(h2o.residual_deviance(performance))) metrics$Residual_Deviance <- h2o.residual_deviance(performance)
+if (!is.null(h2o.r2(performance))) metrics$R2 <- h2o.r2(performance)
+
+perf_metrics <- data.frame(
+  Metric = names(metrics),
+  Value = unlist(metrics)
+)
+
+perf_metrics %>%
+  kbl(
+    caption = "Performance Metrics for H2O Deep Learning Regression Model",
+    align = "c"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = TRUE,
+    font_size = 14
+  ) %>%
+  column_spec(1, bold = TRUE, color = "white", background = "#4CAF50") %>%
+  column_spec(2:3,bold = TRUE, background = "orange") %>%
+  row_spec(0, bold = TRUE, background = "#333333", color = "white")
+
+```
+
+
+
+
+**Key Takeaways from Model Performance**
+
+- **MSE (Mean Squared Error)**:  
+
+  - **Value**: `0.5455`
+  - The model's average squared error is relatively low, indicating a good fit.
+
+- **RMSE (Root Mean Squared Error)**:  
+
+  - **Value**: `0.7386`
+  - On average, the model’s predictions are off by approximately 0.739 units. A relatively small RMSE suggests good predictive accuracy.
+
+- **MAE (Mean Absolute Error)**:  
+
+  - **Value**: `0.2510`
+  - On average, the model's predictions are off by 0.251 units. This metric indicates that the model's errors are consistently small.
+
+- **RMSLE (Root Mean Squared Logarithmic Error)**:  
+
+  - **Value**: `0.0933`
+  - RMSLE is low, which suggests good accuracy when the data contains values with varying scales.
+
+- **R² (Coefficient of Determination)**:  
+
+  - **Value**: `0.9795`
+  - The model explains approximately **97.95%** of the variance in the target variable, demonstrating excellent predictive power.
+
+
+
+### Plot: performance of the model
+
+```{r performance of the model, warning=FALSE}
+plot(h2o_model)
+```
+
+#### Plot Explanation**:
+
+**Trend:**
+
+Both lines show a general decreasing trend in RMSE as the number of epochs increases. This indicates that the model's performance improves with more epochs.
+
+**Training vs. Validation RMSE:**
+
+- Initially, both training and validation RMSE decrease rapidly.
+- Over time, the rate of decrease slows down, indicating the model is learning and improving its predictions.
+
+**Model Generalization:**
+
+- If the validation RMSE closely follows the training RMSE, it suggests that the model generalizes well to unseen data.
+- If there's a significant divergence between the two lines, it could indicate overfitting (the model performs well on training data but poorly on validation data).
+
+
+
+**Model Predictions**
+```{r}
+test_h2o$total_monthly_export_value[1:5]
+predict(h2o_model, test_h2o[1:5,])
+
+```
+
+
+
+### Explain the H2O model 
+
+**Create an explainer for this H2O model**
+
+``` {r Explainer, results = 'hide', warning=FALSE}
+
+test_data <- as.data.frame(test_h2o)
+train_data <- as.data.frame(train_h2o)
+
+train_h2o_sub = train_data[, 1:10]
+test_h2o_sub = test_data[, 1:10]
+
+train_data_sample <- train_data %>% slice_sample(n = 1000)
+
+h2o_exp = explain_h2o(
+h2o_model, data = train_h2o_sub,
+y = train_data$total_monthly_export_value,
+label = "Deep Learning Model", type = "regression")
+
+```
+
+### Expaliner Method-1 : Break-down Plot
+
+```{r Break-down Plot, results = 'hide', warning=FALSE}
+new_application = test_h2o_sub[1, 1:10]
+
+h2o_exp_bd <- predict_parts(
+explainer = h2o_exp, new_observation = new_application,
+type = "break_down")
+
+plot(h2o_exp_bd) + ggtitle("Break-down plot for the new application")
+```
+
+
+### Expaliner Method-2 : Lime Plot
+
+```{r Lime Plot, results = 'hide', warning=FALSE}
+library(lime)
+library("DALEXtra")
+model_type.dalex_explainer <- DALEXtra::model_type.dalex_explainer
+predict_model.dalex_explainer <- DALEXtra::predict_model.dalex_explainer
+
+tradepatterns_exp_lime <- predict_surrogate(
+explainer = h2o_exp, new_observation = new_application,
+n_features = 20, n_permutations = 1000, type = "lime")
+
+
+plot(tradepatterns_exp_lime)
+```
+
+
+
+### Expaliner Method-3 : Partial-dependence Profiles
+
+```{r Partial-dependence Profiles Plot, results = 'hide', warning=FALSE}
+tradepatterns_exp_pdp <- model_profile(
+explainer = h2o_exp,
+variables = "monthly_vessel_export_value")
+
+plot(tradepatterns_exp_pdp) + ggtitle("PD profile for age")
+plot(tradepatterns_exp_pdp, geom="profiles")+ggtitle("CP & PD profiles for age")
+
+```
+
+
+
+### Expaliner Method-4 : Variable-importance Measures
+```{r Variable-importance Measure, results = 'hide', warning=FALSE}
+tradepatterns_exp_vip <- model_parts(
+explainer = h2o_exp,
+B = 50, type = "difference")
+
+plot(tradepatterns_exp_vip) +
+ggtitle("Mean variable-importance over 50 permutations")
+```
+
+
+
+
+
+
+### XAI-Method-1 - SHAP
+
+``` {r SHAP plot, results = 'hide', warning=FALSE}
+h2o_exp_shap <- predict_parts(
+explainer = explainer, new_observation = new_application, type = "shap", B = 3)
+plot(h2o_exp_shap) + ggtitle("SHAP explanation")
+```
+#### Key Insights of SHAP:
+
+**Significant Negative Impact:**
+
+- **monthly_vessel_export_value** and **monthly_air_export_value** being zero.
+
+- **year_to_date_card_count** having a value of 1.
+
+**Moderate Negative Impact:**
+
+- Missing **country_code**.
+
+**Small Negative Impact:**
+
+- **domestic_foreign_indicator** being "-".
+
+- **export_commodity_long_description** being "PASTA, PREPARED, NESOI".
+
+- **quantity_1_year_to_date** being zero.
+
+**Negligible Impact:**
+
+- Missing **total_year_to_date_export_value**.
+
+- Missing **year_to_date_vessel_export_value**.
+
+- Missing **year_to_date_vessel_weight**.
+
+
+
+
+
+
+## Conclusion
+
+This project aims to provide valuable insights into global trade dynamics, supporting stakeholders in making informed decisions about export strategies and market targeting.
